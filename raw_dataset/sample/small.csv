@@ -1,0 +1,5 @@
+audio,text,duration
+chunk001.wav,This is a test,2.334
+chunk002.wav,Garbage data,3.234
+chunk003.wav,Shit in shit out.,5.324
+chunk004.wav,Testing prepare_dataset_from_raw_dataset.py,7.664

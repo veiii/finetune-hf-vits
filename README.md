@@ -278,6 +278,31 @@ When using local datasets, ensure your data is properly formatted:
  > [!NOTE]
 > The [training_config_examples](./training_config_examples) also contains examples for different dataset types and languages, including how to track experiments using [wandb](https://github.com/wandb/wandb).
 
+### Fast run with makefile
+
+#### Install dependencies and get base model
+```bash
+make install
+make convert-mms-checkpoint LANG_CODE=pol
+```
+
+#### Prepare dataset
+```bash
+python dataset/prepare_dataset_from_raw_dataset.py \
+        --csv-path raw_dataset/sample/small.csv \
+        --audio-dir raw_dataset/sample/chunks/ \
+        --output-path dataset/data/
+```
+
+#### Finetune
+```bash
+accelerate config
+make finetune-local training_config_examples/finetune_mms_pol_local_dataset.json
+```
+#### Test model
+```bash
+make test-model MODEL_PATH=./model_files/training_output/mms_pol_finetuning_epoch_20
+```
 
 ## 4. Inference
 

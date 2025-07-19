@@ -75,7 +75,8 @@ class VISTModelWrapper:
             logging.warning(f"Skipping track due to invalid input: {input_text}")
             return AudioSegment.empty()
 
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        if self.device.type == "cuda":
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
         with torch.no_grad():
             output = self.model(**inputs).waveform
@@ -135,7 +136,7 @@ async def main(inputs, mp3_output_path, model_name="facebook/mms-tts-pol"):
     # check if model name is a local file path
     if model_name == "facebook/mms-tts-pol":
         model = VitsModel.from_pretrained(model_name)
-    elif model_name.startswith("/"):
+    elif model_name.startswith("/") or model_name.startswith("./"):
         model = VitsModel.from_pretrained(
             model_name,
             local_files_only=True,  # Don't try to download from HF Hub

@@ -1,15 +1,15 @@
 {
-    "model_name_or_path": "~/finetune-hf-vits/model_files/",
+    "model_name_or_path": "./model_files/pol",
     "override_speaker_embeddings": true,
     "cache_dir": null,
     "token": null,
-    "data_dir": "~/finetune-hf-vits/dataset_all",
+    "data_dir": null,
     "dataset_path": null,
-    "parquet_file": "~/finetune-hf-vits/dataset_all/dataset.parquet",
+    "parquet_file": "./dataset/data/dataset.parquet",
     "dataset_name": null,
     "dataset_config_name": null,
     "audio_column_name": "audio",
-    "text_column_name": "transcript",
+    "text_column_name": "text",
 
     "train_split_name": "train",
     "eval_split_name": "eval",
@@ -17,11 +17,11 @@
     "min_duration_in_seconds": 1.0,
     "max_tokens_length": 500,
     "preprocessing_num_workers": 1,
-    "output_dir": "~/finetune-hf-vits/model_files/training_output/mms_pol_finetuning_full",
+    "output_dir": "./model_files/training_output/mms_pol_finetuning_epoch_20",
     "overwrite_output_dir": true,
     "do_train": true,
     "do_eval": false,
-    "num_train_epochs": 200,
+    "num_train_epochs": 20,
     "per_device_train_batch_size": 4,
     "per_device_eval_batch_size": 8,
     "gradient_accumulation_steps": 1,
@@ -35,3 +35,5 @@
     "report_to": ["wandb"],
     "seed": 456
 }
+
+model_files/training_output/mms_pol_finetuning_epoch_20
