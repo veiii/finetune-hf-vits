@@ -35,5 +35,3 @@
     "report_to": ["wandb"],
     "seed": 456
 }
-
-model_files/training_output/mms_pol_finetuning_epoch_20
