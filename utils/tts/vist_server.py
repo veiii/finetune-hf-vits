@@ -52,10 +52,10 @@ class VISTModelWrapper:
 
         # Simulate available GPU capacity logic
         total_memory = torch.cuda.get_device_properties(0).total_memory
-        available_memory = min(total_memory, GPU_MEMORY_MAX_USE_GB * 1024 ** 3)
-        mem_per_request = 500 * 1024 ** 2  # 500MB per request (estimate)
+        available_memory = min(total_memory, GPU_MEMORY_MAX_USE_GB * 1024**3)
+        mem_per_request = 500 * 1024**2  # 500MB per request (estimate)
         logging.info(
-            f"Total memory: {_bytes_to(total_memory, to="m")}, available memory: {_bytes_to(available_memory, to="m")}, mem_per_request: {_bytes_to(mem_per_request, to="m")}"
+            f"Total memory: {_bytes_to(total_memory, to='m')}, available memory: {_bytes_to(available_memory, to='m')}, mem_per_request: {_bytes_to(mem_per_request, to='m')}"
         )
         return max(1, available_memory // mem_per_request)
 
@@ -81,15 +81,17 @@ class VISTModelWrapper:
             output = self.model(**inputs).waveform
         speech = output.squeeze().cpu().numpy()
         # Log GPU memory usage
-        current_mem = torch.cuda.memory_allocated(self.device) / (1024 ** 2)
-        peak_mem = torch.cuda.max_memory_allocated(self.device) / (1024 ** 2)
+        current_mem = torch.cuda.memory_allocated(self.device) / (1024**2)
+        peak_mem = torch.cuda.max_memory_allocated(self.device) / (1024**2)
         # force clear cache
         if FORCE_CLEAR_INPUTS_AFTER_INTERFERENCE:
             del inputs
         if FORCE_CLEAR_CACHE_AFTER_INTERFERENCE:
             gc.collect()
             torch.cuda.empty_cache()
-        tqdm.write(f"Memory used: {current_mem:.2f} MB, Peak during synthesis: {peak_mem:.2f} MB")
+        tqdm.write(
+            f"Memory used: {current_mem:.2f} MB, Peak during synthesis: {peak_mem:.2f} MB"
+        )
         # convert to AudioSegment
         scaled_output = np.int16(speech * 32767)
         audio = AudioSegment(
@@ -105,18 +107,22 @@ def load_text_from_file(txt_file_path):
     with open(txt_file_path, "r", encoding="utf-8") as f:
         return f.read()
 
+
 def slow_down(audio: AudioSegment, speed: float = 0.9) -> AudioSegment:
     # Slows down by resampling
     if speed == 1.0:
         return audio
     new_frame_rate = int(audio.frame_rate * speed)
-    slowed = audio._spawn(audio.raw_data, overrides={'frame_rate': new_frame_rate})
+    slowed = audio._spawn(audio.raw_data, overrides={"frame_rate": new_frame_rate})
     return slowed.set_frame_rate(audio.frame_rate)
+
 
 def preprocess_audio_segement(audio: AudioSegment):
     processed_audio = slow_down(audio, speed=1.0)
     if PAUSE_DURATION_MS_END_OF_SEQUENCES > 0:
-        processed_audio += AudioSegment.silent(duration=PAUSE_DURATION_MS_END_OF_SEQUENCES)
+        processed_audio += AudioSegment.silent(
+            duration=PAUSE_DURATION_MS_END_OF_SEQUENCES
+        )
     return processed_audio
 
 
@@ -133,7 +139,7 @@ async def main(inputs, mp3_output_path, model_name="facebook/mms-tts-pol"):
         model = VitsModel.from_pretrained(
             model_name,
             local_files_only=True,  # Don't try to download from HF Hub
-            trust_remote_code=True
+            trust_remote_code=True,
         )
     else:
         Exception("Wrong model name")
@@ -145,17 +151,16 @@ async def main(inputs, mp3_output_path, model_name="facebook/mms-tts-pol"):
     track = AudioSegment.empty()
     for idx, res in tqdm(enumerate(results)):
         logging.debug(f"Processing result: {res}")
-        #slow down audio and make silence at end od sequense
+        # slow down audio and make silence at end od sequense
         processed_audio = preprocess_audio_segement(res)
         track += processed_audio
     logging.info(f"Track length: {_log_track_length(track.duration_seconds)}")
     track.export(mp3_output_path, format="mp3")
     logging.info(f"Exported MP3: {mp3_output_path}")
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="Text-to-Speech Synthesizer with VITS"
-    )
+    parser = argparse.ArgumentParser(description="Text-to-Speech Synthesizer with VITS")
     parser.add_argument(
         "--input", "-i", type=str, required=True, help="Path to input text file"
     )
@@ -181,6 +186,7 @@ def parse_arguments():
         logging.error(f"Input file not found: {input_args.input}")
         exit(1)
     return input_args
+
 
 if __name__ == "__main__":
     s = time.perf_counter()  # Elapsed time counter

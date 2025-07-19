@@ -9,7 +9,7 @@
     "dataset_name": null,
     "dataset_config_name": null,
     "audio_column_name": "audio",
-    "text_column_name": "text",
+    "text_column_name": "transcript",
 
     "train_split_name": "train",
     "eval_split_name": "eval",

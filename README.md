@@ -160,20 +160,73 @@ You can now use `<repo-id-you-want>` or `<local-folder>` as a starting point to 
 
 ## 3. Finetuning
 
-There are two ways to run the finetuning scrip, both using command lines. Note that you only need one GPU to finetune VITS/MMS as the models are really lightweight (83M parameters).
+There are multiple ways to run the finetuning script, all using command lines. Note that you only need one GPU to finetune VITS/MMS as the models are really lightweight (83M parameters).
 
 **Preferred way: use a json config file**
 
  > [!NOTE]
 > Using a config file is the prefered way to use the finetuning script as it includes the most important parameters to consider. For a full list of parameters, run `python run_vits_finetuning.py --help`. Note that some parameters are not ignored by the training script.
 
-
 The [training_config_examples](./training_config_examples) folder hosts examples of config files. Once satisfied with your config file, you can then finetune the model.
 
-For example, [finetune_english.json](./training_config_examples/finetune_english.json) is a working example of finetuning on a Welsh female accent.
+### Dataset Options
+
+The finetuning script now supports three different ways to load your training data:
+
+**Option 1: Local Parquet File**
+
+Use a parquet file containing your dataset with audio file paths and transcripts:
+
+```json
+{
+    "parquet_file": "/path/to/your/dataset.parquet",
+    "dataset_path": null,
+    "dataset_name": null
+}
+```
+
+The parquet file should contain columns:
+- `audio`: Path to audio files
+- `transcript`: Text transcriptions
+- `speaker_id`: (Optional) Speaker identifiers
+
+Example configuration: [finetune_mms_pol_local_dataset.json](./training_config_examples/finetune_mms_pol_local_dataset.json)
+
+**Option 2: Local Dataset Directory**
+
+Use a local directory containing a preprocessed HuggingFace dataset:
+
+```json
+{
+    "dataset_path": "/path/to/your/dataset_directory",
+    "parquet_file": null,
+    "dataset_name": null
+}
+```
+
+**Option 3: HuggingFace Hub Dataset**
+
+Use a dataset from the HuggingFace Hub:
+
+```json
+{
+    "dataset_name": "your-username/your-dataset",
+    "dataset_config_name": "optional-config",
+    "dataset_path": null,
+    "parquet_file": null
+}
+```
+
+### Running Finetuning
+
+For example, [finetune_english.json](./training_config_examples/finetune_english.json) is a working example of finetuning on a Welsh female accent, while [finetune_mms_pol_local_dataset.json](./training_config_examples/finetune_mms_pol_local_dataset.json) shows how to use a local parquet file.
 
 ```sh
+# Using a config file
 accelerate launch run_vits_finetuning.py ./training_config_examples/finetune_english.json
+
+# Using local dataset with parquet file
+accelerate launch run_vits_finetuning.py ./training_config_examples/finetune_mms_pol_local_dataset.json
 ```
 
 **Other option: pass parameters directly to the command line.**
@@ -181,7 +234,14 @@ accelerate launch run_vits_finetuning.py ./training_config_examples/finetune_eng
 For example:
 
 ```sh
-accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH --output_dir OUTPUT_DIR ...
+# Using HuggingFace Hub dataset
+accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH --dataset_name YOUR_DATASET --output_dir OUTPUT_DIR
+
+# Using local parquet file
+accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH --parquet_file /path/to/dataset.parquet --output_dir OUTPUT_DIR
+
+# Using local dataset directory
+accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH --dataset_path /path/to/dataset --output_dir OUTPUT_DIR
 ```
 
 **Important parameters to consider:**
@@ -189,7 +249,11 @@ accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH
 * The model to finetune: `model_name_or_path`.
   - Here it should point to the training checkpoint of the previous [section](#2-model-selection).
   - For example, if you choose an already existing checkpoint: `ylacombe/vits-ljs-with-discriminator`, or if you converted your own checkpoint: `<repo-id-you-want>` or `<local-folder>`. 
-* The dataset used `dataset_name` and its details: `dataset_config_name`, column names, etc. 
+* The dataset source - choose one of:
+  - `dataset_name` and its details: `dataset_config_name`, column names, etc. for HuggingFace Hub datasets
+  - `parquet_file`: Path to a local parquet file containing audio paths and transcripts
+  - `dataset_path`: Path to a local directory with preprocessed HuggingFace dataset
+* Speaker configuration:
   - If there are multiple speakers and you want to only keep one, be careful to `speaker_id_column_name`, `override_speaker_embeddings` and `filter_on_speaker_id`. The latter allows to keep only one speaker but you can also train on multiple speakers.
   - For example the dataset used by default in [`finetune_english.json`](training_config_examples/finetune_english.json) is a subset of [British Isles accents dataset](https://huggingface.co/datasets/ylacombe/english_dialects), using a single Welsh female voice of the `welsh_female` configuration, identified by `speaker_id=5223`.
 * The most important hyperparameters
@@ -197,9 +261,22 @@ accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH
    - `batch_size`
    - the different losses weights: weight_duration, weight_kl, weight_mel, weight_disc, weight_gen, weight_fmaps
 
+### Local Dataset Preparation
+
+When using local datasets, ensure your data is properly formatted:
+
+**For Parquet Files:**
+- Include columns: `audio`, `transcript`, and optionally `speaker_id`
+- Audio files should be accessible from the paths specified in `audio` column (path to files should be absolute or relative to the parquet file location)
+- Supports common audio formats (wav, mp3, flac, etc.)
+
+**For Local Dataset Directories:**
+- Use HuggingFace datasets format with `datasets.save_to_disk()`
+- Audio column should be of type `datasets.Audio`
+- The script will automatically handle format conversion if needed
 
  > [!NOTE]
-> The [training_config_examples](./training_config_examples) also contains two other examples, one to finetune a Gujarati checkpoint and another to finetune a Korean checkpoint. Those examples also shows how to track experiments using [wandb](https://github.com/wandb/wandb).
+> The [training_config_examples](./training_config_examples) also contains examples for different dataset types and languages, including how to track experiments using [wandb](https://github.com/wandb/wandb).
 
 
 ## 4. Inference
@@ -207,17 +284,57 @@ accelerate launch run_vits_finetuning.py --model_name_or_path MODEL_NAME_OR_PATH
 You can use a finetuned model via the Text-to-Speech (TTS) [pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines#transformers.pipeline) in just a few lines of code!
 Just replace `ylacombe/vits_ljs_welsh_female_monospeaker_2` with your own model id (`hub_model_id`) or path to the model (`output_dir`).
 
-```python
-from transformers import pipeline
-import scipy
+### Batch Processing with vist_server.py
 
-model_id = "ylacombe/vits_ljs_welsh_female_monospeaker_2"
-synthesiser = pipeline("text-to-speech", model_id) # add device=0 if you want to use a GPU
+For processing longer texts or multiple inputs efficiently, you can use the included `vist_server.py` script located in `utils/tts/`. This script provides:
 
-speech = synthesiser("Hello, my dog is cooler than you!")
+- **Async processing**: Handles multiple text inputs concurrently for faster processing
+    - **GPU memory management**: Automatically estimates capacity and manages memory usage
+- **Text file processing**: Converts entire text files to MP3 audio
+- **Configurable output**: Supports custom pause durations and audio preprocessing
 
-scipy.io.wavfile.write("finetuned_output.wav", rate=speech["sampling_rate"], data=speech["audio"][0])
+**Usage:**
+
+```bash
+python utils/tts/vist_server.py --input input.txt --output output.mp3 --model facebook/mms-tts-pol
 ```
+
+**Parameters:**
+- `--input, -i`: Path to input text file
+- `--output, -o`: Path to output MP3 file
+- `--model, -m`: Model name or path (default: facebook/mms-tts-pol)
+- `--max-lines, -n`: Number of lines to process (0 for all lines, default: 20)
+
+**Example with custom model:**
+
+```bash
+# Using a local finetuned model
+python utils/tts/vist_server.py -i my_text.txt -o my_audio.mp3 -m /path/to/your/finetuned/model
+
+# Using a Hugging Face model
+python utils/tts/vist_server.py -i my_text.txt -o my_audio.mp3 -m ylacombe/vits_ljs_welsh_female_monospeaker_2
+```
+
+The script automatically handles:
+- Empty lines as pause markers
+- Memory optimization for long texts
+- Progress tracking with tqdm
+- GPU cache clearing after processing
+
+
+### Pure Python Inference
+```python
+  from transformers import pipeline
+  import scipy
+
+  model_id = "ylacombe/vits_ljs_welsh_female_monospeaker_2"
+  synthesiser = pipeline("text-to-speech", model_id) # add device=0 if you want to use a GPU
+
+  speech = synthesiser("Hello, my dog is cooler than you!")
+
+  scipy.io.wavfile.write("finetuned_output.wav", rate=speech["sampling_rate"], data=speech["audio"][0])
+```
+
 
 Note that if your model needs to use `uroman` to train, you also should apply the uroman package to your text inputs prior to passing them to the pipeline:
 
