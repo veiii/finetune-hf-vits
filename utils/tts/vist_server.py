@@ -15,7 +15,7 @@ import sys
 
 PAUSE_DURATION_MS = 800
 PAUSE_DURATION_MS_END_OF_SEQUENCES = 500
-GPU_MEMORY_MAX_USE_GB = 3
+GPU_MEMORY_MAX_USE_GB = torch.cuda.get_device_properties(0).total_memory * 0.8  # Use 80% of total GPU memory
 set_seed(456)  # make model determistic
 LOGING_LEVEL = logging.INFO
 FORCE_CLEAR_INPUTS_AFTER_INTERFERENCE = True
