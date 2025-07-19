@@ -18,7 +18,7 @@ import os
 
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import ProjectConfiguration, is_wandb_available, set_seed
-from datasets import DatasetDict, load_dataset
+from datasets import DatasetDict, load_dataset, load_from_disk, Dataset
 from monotonic_align import maximum_path
 from tqdm.auto import tqdm
 
@@ -292,6 +292,14 @@ class DataTrainingArguments:
             )
         },
     )
+    dataset_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to local dataset directory"},
+    )
+    parquet_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to local parquet file containing dataset"},
+    )
 
 # DATA COLLATOR
 
@@ -409,6 +417,123 @@ def feature_loss(feature_maps_real, feature_maps_generated):
 
     return loss * 2
 
+def get_dataset(data_args, model_args):
+    """Load dataset from local path, parquet file, or huggingface hub"""
+    if data_args.parquet_file is not None:
+        logger.info(f"Loading dataset from parquet file: {data_args.parquet_file}")
+
+        # Read parquet file
+        import pandas as pd
+        df = pd.read_parquet(data_args.parquet_file)
+
+        # Create audio features from paths
+        def create_audio_entry(row):
+            try:
+                import soundfile as sf
+                audio_array, sr = sf.read(row['audio_path'])
+                if len(audio_array.shape) > 1:
+                    audio_array = audio_array.mean(axis=1)
+                return {
+                    "array": audio_array.astype(np.float32),
+                    "sampling_rate": sr
+                }
+            except Exception as e:
+                logger.error(f"Error loading audio file {row['audio_path']}: {str(e)}")
+                return None
+
+        # Convert DataFrame to Dataset
+        dataset_dict = {
+            "audio": [create_audio_entry(row) for _, row in df.iterrows()],
+            "text": df['transcript'].tolist(),
+        }
+
+        if 'speaker_id' in df.columns:
+            dataset_dict["speaker_id"] = df['speaker_id'].tolist()
+
+        raw_datasets = Dataset.from_dict(dataset_dict)
+        raw_datasets = DatasetDict({"train": raw_datasets})
+
+    elif data_args.dataset_path is not None:
+        logger.info(f"Loading dataset from local path: {data_args.dataset_path}")
+        raw_datasets = load_from_disk(data_args.dataset_path)
+        if not isinstance(raw_datasets, DatasetDict):
+            raw_datasets = DatasetDict({
+                "train": raw_datasets
+            })
+
+        # Convert audio features to Audio type if needed
+        if not isinstance(raw_datasets["train"].features[data_args.audio_column_name], datasets.Audio):
+            logger.info("Converting audio column to Audio feature...")
+
+            def convert_audio_format(example):
+                if isinstance(example[data_args.audio_column_name], dict):
+                    if "array" in example[data_args.audio_column_name]:
+                        return example
+
+                audio_data = example[data_args.audio_column_name]
+
+                # Convert list or dict to numpy array with proper shape
+                if isinstance(audio_data, list):
+                    audio_array = np.array(audio_data, dtype=np.float32)
+                elif isinstance(audio_data, dict) and isinstance(audio_data.get("array"), list):
+                    audio_array = np.array(audio_data["array"], dtype=np.float32)
+                else:
+                    audio_array = audio_data
+
+                # Ensure audio data is 1D and properly shaped
+                if len(audio_array.shape) == 2:
+                    # If 2D, take first channel
+                    audio_array = audio_array[:, 0] if audio_array.shape[1] < audio_array.shape[0] else audio_array[0, :]
+                elif len(audio_array.shape) > 2:
+                    raise ValueError(f"Audio data has too many dimensions: {audio_array.shape}")
+
+                # Ensure it's float32
+                audio_array = audio_array.astype(np.float32)
+
+                logger.debug(f"Converted audio shape: {audio_array.shape}, dtype: {audio_array.dtype}")
+
+                return {
+                    **example,
+                    data_args.audio_column_name: {
+                        "array": audio_array,
+                        "sampling_rate": 16000  # Default sampling rate
+                    }
+                }
+
+            try:
+                # First convert the audio data format
+                logger.info("Converting audio format...")
+                raw_datasets = raw_datasets.map(
+                    convert_audio_format,
+                    desc="Converting audio format",
+                    num_proc=data_args.preprocessing_num_workers,
+                    load_from_cache_file=False
+                )
+
+                logger.info("Casting column to Audio feature...")
+                # Then cast the column to Audio feature
+                raw_datasets = raw_datasets.cast_column(
+                    data_args.audio_column_name,
+                    datasets.Audio(sampling_rate=16000)
+                )
+
+                logger.info("Audio column conversion complete")
+            except Exception as e:
+                logger.error(f"Error during audio conversion: {str(e)}")
+                raise
+
+    elif data_args.dataset_name is not None:
+        logger.info(f"Loading dataset {data_args.dataset_name} from HuggingFace Hub")
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            token=model_args.token,
+        )
+    else:
+        raise ValueError("Either dataset_path, parquet_file, or dataset_name must be provided")
+
+    return raw_datasets
 
 def generator_loss(disc_outputs):
     total_loss = 0
@@ -531,13 +656,16 @@ def main():
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1]),
+            allow_extra_keys=True
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_vits_finetuning", model_args, data_args)
+    # send_example_telemetry("run_vits_finetuning", model_args, data_args)
 
     # 2. Setup logging
     logging.basicConfig(
@@ -585,25 +713,7 @@ def main():
     set_seed(training_args.seed)
 
     # 4. Load dataset
-    raw_datasets = DatasetDict()
-
-    if training_args.do_train:
-        raw_datasets["train"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split=data_args.train_split_name,
-            cache_dir=model_args.cache_dir,
-            token=model_args.token,
-        )
-
-    if training_args.do_eval:
-        raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split=data_args.eval_split_name,
-            cache_dir=model_args.cache_dir,
-            token=model_args.token,
-        )
+    raw_datasets = get_dataset(data_args, model_args)
 
     if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
         raise ValueError(
@@ -659,11 +769,18 @@ def main():
     )
 
     # 6. Resample speech dataset if necessary
-    dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
+    try:
+        dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
+    except (AttributeError, KeyError):
+        logger.warning("Could not detect dataset sampling rate. Using model sampling rate.")
+        dataset_sampling_rate = feature_extractor.sampling_rate
+
     if dataset_sampling_rate != feature_extractor.sampling_rate:
+        logger.info(f"Resampling dataset from {dataset_sampling_rate} to {feature_extractor.sampling_rate}")
         with training_args.main_process_first(desc="resample"):
             raw_datasets = raw_datasets.cast_column(
-                data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+                data_args.audio_column_name,
+                datasets.Audio(sampling_rate=feature_extractor.sampling_rate)
             )
 
     # 7. Preprocessing the datasets.
