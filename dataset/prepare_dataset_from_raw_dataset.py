@@ -142,7 +142,7 @@ def create_dataset_from_csv(csv_path, audio_dir, output_path):
             # Store processed row info for parquet file
             processed_rows.append({
                 'audio': new_audio_path,  # Use absolute path instead of relative
-                'transcript': str(row['transcript']).strip(),  # Training script expects 'text' column
+                'text': str(row['transcript']).strip(),  # Training script expects 'text' column
                 'duration': row.get('duration', 0),
                 'speaker_id': "1"
             })

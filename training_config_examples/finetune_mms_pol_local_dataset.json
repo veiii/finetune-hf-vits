@@ -3,7 +3,7 @@
     "override_speaker_embeddings": true,
     "cache_dir": null,
     "token": null,
-    "data_dir": null,
+    "data_dir": "./dataset/data/",
     "dataset_path": null,
     "parquet_file": "./dataset/data/dataset.parquet",
     "dataset_name": null,

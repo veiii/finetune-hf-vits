@@ -430,7 +430,7 @@ def get_dataset(data_args, model_args):
         def create_audio_entry(row):
             try:
                 import soundfile as sf
-                audio_array, sr = sf.read(row['audio_path'])
+                audio_array, sr = sf.read(row[data_args.audio_column_name])
                 if len(audio_array.shape) > 1:
                     audio_array = audio_array.mean(axis=1)
                 return {
@@ -438,13 +438,13 @@ def get_dataset(data_args, model_args):
                     "sampling_rate": sr
                 }
             except Exception as e:
-                logger.error(f"Error loading audio file {row['audio_path']}: {str(e)}")
+                logger.error(f"Error loading audio file {row[data_args.audio_column_name]}: {str(e)}")
                 return None
 
         # Convert DataFrame to Dataset
         dataset_dict = {
             "audio": [create_audio_entry(row) for _, row in df.iterrows()],
-            "text": df['transcript'].tolist(),
+            "text": df[data_args.text_column_name].tolist(),
         }
 
         if 'speaker_id' in df.columns:
@@ -1609,3 +1609,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
