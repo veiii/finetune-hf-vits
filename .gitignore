@@ -172,3 +172,6 @@ cython_debug/
 /dataset/data/
 /raw_dataset/base_audio_data/
 raw_dataset/denoise/output_audacity.zip
+/model_files/training_output/
+/raw_dataset/processing/
+

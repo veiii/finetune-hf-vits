@@ -8,3 +8,5 @@ Cython
 pydub
 torch
 numpy
+wisper
+demucs
