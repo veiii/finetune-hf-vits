@@ -170,3 +170,5 @@ cython_debug/
 /model_files/pol/
 /raw_dataset/sample/chunks/
 /dataset/data/
+/raw_dataset/base_audio_data/
+raw_dataset/denoise/output_audacity.zip
