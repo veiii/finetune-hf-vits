@@ -28,6 +28,10 @@ chmod +x cut_into_chunks.sh
 
 ## Preprocess audio files for training
 ```bash
-python raw_dataset/prepare_voice_audio_file.py --input ./raw_dataset/processing/output_chunks/ --output ./raw_dataset/processing/chunks_cleaned_audio/ --temp /tmp/dmc --num_workers 8
+python raw_dataset/prepare_voice_audio_file.py -i ./raw_dataset/processing/output_chunks/ -o ./raw_dataset/processing/chunks_cleaned_audio/ -w 1
 ```
 
+## Create metadata for training
+```bash
+python utils/stt/transcribe_chunks.py --input-dir ./raw_dataset/processing/output_chunks/ --output-csv ./raw_dataset/processing/output_chunks_transcribed_small.csv --model small --language pol --device cpu
+```
