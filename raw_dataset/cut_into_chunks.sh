@@ -46,6 +46,12 @@ check_dependencies() {
         echo "Please install ffmpeg: sudo apt-get install ffmpeg"
         exit 1
     fi
+
+    if ! command -v bc &> /dev/null; then
+        echo "Error: bc (basic calculator) is required but not installed."
+        echo "Please install bc: sudo apt-get install bc"
+        exit 1
+    fi
 }
 
 # Function to validate audio file

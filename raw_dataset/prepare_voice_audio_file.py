@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 
 def extract_vocals_with_demucs(input_file, temp_output_dir):
@@ -49,7 +51,7 @@ def extract_vocals_with_demucs(input_file, temp_output_dir):
         return None
 
 
-def process_audio_directory(input_dir, output_dir, temp_dir=None):
+def process_audio_directory(input_dir, output_dir, temp_dir=None, max_workers=None):
     """
     Process all WAV files in input directory to extract vocals
 
@@ -57,6 +59,7 @@ def process_audio_directory(input_dir, output_dir, temp_dir=None):
         input_dir: Directory containing input WAV files
         output_dir: Directory to save extracted vocals
         temp_dir: Temporary directory for demucs processing (optional)
+        max_workers: Maximum number of worker threads (optional)
     """
     input_path = Path(input_dir)
     output_path = Path(output_dir)
@@ -78,34 +81,69 @@ def process_audio_directory(input_dir, output_dir, temp_dir=None):
         print(f"No WAV files found in {input_dir}")
         return
 
+    # Determine number of workers
+    if max_workers is None:
+        max_workers = min(os.cpu_count(), len(wav_files))
+
     print(f"Found {len(wav_files)} WAV files to process")
     print(f"Input directory: {input_dir}")
     print(f"Output directory: {output_dir}")
     print(f"Temporary directory: {temp_path}")
+    print(f"Using {max_workers} worker threads")
     print()
 
+    # Thread-safe counters
     successful_count = 0
     failed_count = 0
+    count_lock = threading.Lock()
 
-    # Process each file with progress bar
-    for wav_file in tqdm(wav_files, desc="Extracting vocals"):
+    def process_single_file(wav_file):
+        """Process a single WAV file"""
+        nonlocal successful_count, failed_count
+
         try:
+            # Create unique temp directory for this thread to avoid conflicts
+            thread_temp_dir = temp_path / f"thread_{threading.get_ident()}"
+            thread_temp_dir.mkdir(exist_ok=True)
+
             # Extract vocals using demucs
-            vocals_file = extract_vocals_with_demucs(wav_file, temp_path)
+            vocals_file = extract_vocals_with_demucs(wav_file, thread_temp_dir)
 
             if vocals_file and vocals_file.exists():
                 # Copy vocals file to output directory with original filename
                 output_file = output_path / f"{wav_file.stem}_vocals.wav"
                 shutil.copy2(vocals_file, output_file)
-                successful_count += 1
-                tqdm.write(f"✓ Processed: {wav_file.name} -> {output_file.name}")
+
+                with count_lock:
+                    successful_count += 1
+
+                return f"✓ Processed: {wav_file.name} -> {output_file.name}"
             else:
-                failed_count += 1
-                tqdm.write(f"✗ Failed: {wav_file.name}")
+                with count_lock:
+                    failed_count += 1
+                return f"✗ Failed: {wav_file.name}"
 
         except Exception as e:
-            failed_count += 1
-            tqdm.write(f"✗ Error processing {wav_file.name}: {str(e)}")
+            with count_lock:
+                failed_count += 1
+            return f"✗ Error processing {wav_file.name}: {str(e)}"
+
+    # Process files with multithreading
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_file = {executor.submit(process_single_file, wav_file): wav_file
+                         for wav_file in wav_files}
+
+        # Process completed tasks with progress bar
+        for future in tqdm(as_completed(future_to_file),
+                          total=len(future_to_file),
+                          desc="Extracting vocals"):
+            try:
+                result_message = future.result()
+                tqdm.write(result_message)
+            except Exception as e:
+                wav_file = future_to_file[future]
+                tqdm.write(f"✗ Unexpected error with {wav_file.name}: {str(e)}")
 
     # Cleanup temporary directory
     try:
