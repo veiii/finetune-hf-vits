@@ -301,7 +301,10 @@ make finetune-local training_config_examples/finetune_mms_pol_local_dataset.json
 ```
 #### Test model
 ```bash
-make test-model MODEL_PATH=./model_files/training_output/mms_pol_finetuning_epoch_20
+make test-model MODEL_PATH=/path/to/your/model
+
+# Use any custom text file
+make test-model MODEL_PATH=/path/to/your/model TEST_DATASET=/home/user/my_test_text.txt
 ```
 
 ## 4. Inference

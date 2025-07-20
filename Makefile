@@ -223,17 +223,25 @@ finetune-parquet:
 
 # Testing targets
 test-model:
-	@echo "Testing trained model with Pan Tadeusz..."
+	@echo "Testing trained model..."
 	@if [ -z "$(MODEL_PATH)" ]; then \
 		echo "❌ Please specify MODEL_PATH: make test-model MODEL_PATH=/path/to/model"; \
 		exit 1; \
 	fi
-	@if [ ! -f "testing_dataset/pan_tadeusz.txt" ]; then \
-		echo "❌ Test file not found: testing_dataset/pan_tadeusz.txt"; \
+	@TEST_FILE=$(or $(TEST_DATASET),"testing_dataset/pan_tadeusz.txt"); \
+	if [ ! -f "$$TEST_FILE" ]; then \
+		echo "❌ Test file not found: $$TEST_FILE"; \
+		if [ -z "$(TEST_DATASET)" ]; then \
+			echo "💡 Default test file missing. You can specify a custom test file with: make test-model MODEL_PATH=/path/to/model TEST_DATASET=/path/to/test.txt"; \
+		else \
+			echo "💡 Please check the path to your test dataset file"; \
+		fi; \
 		exit 1; \
 	fi
+	@TEST_FILE=$(or $(TEST_DATASET),"testing_dataset/pan_tadeusz.txt"); \
+	echo "📖 Using test dataset: $$TEST_FILE"; \
 	python utils/tts/vist_server.py \
-		--input testing_dataset/pan_tadeusz.txt \
+		--input "$$TEST_FILE" \
 		--output $(or $(OUTPUT_AUDIO),./test_output_$(shell date +%Y%m%d_%H%M%S).mp3) \
 		--model $(MODEL_PATH) \
 		--max-lines $(or $(MAX_LINES),50)
