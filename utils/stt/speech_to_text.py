@@ -28,7 +28,9 @@ async def write_record(output_csv: str, record: dict, lock: asyncio.Lock):
     header_needed = not os.path.exists(output_csv) or os.path.getsize(output_csv) == 0
     async with lock:
         with open(output_csv, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["wav_filename", "transcript", "duration"])
+            writer = csv.DictWriter(
+                f, fieldnames=["wav_filename", "transcript", "duration"]
+            )
             if header_needed:
                 writer.writeheader()
             writer.writerow(record)
@@ -41,11 +43,9 @@ def _do_transcribe(model, path, language):
     return model.transcribe(path, language=language)["text"].strip()
 
 
-async def transcribe_file(path: str,
-                          model,
-                          sem: asyncio.Semaphore,
-                          model_lock: asyncio.Lock,
-                          language: str) -> dict:
+async def transcribe_file(
+    path: str, model, sem: asyncio.Semaphore, model_lock: asyncio.Lock, language: str
+) -> dict:
     """
     Acquire `sem` to limit concurrency, then acquire `model_lock` to serialize
     actual whisper calls. Returns a record dict or raises.
@@ -54,14 +54,16 @@ async def transcribe_file(path: str,
         loop = asyncio.get_event_loop()
         # ensure only one thread invokes whisper at a time:
         async with model_lock:
-            text = await loop.run_in_executor(None, _do_transcribe, model, path, language)
+            text = await loop.run_in_executor(
+                None, _do_transcribe, model, path, language
+            )
 
         info = sf.info(path)
         duration = round(info.frames / info.samplerate, 3)
         return {
             "wav_filename": os.path.basename(path),
             "transcript": text,
-            "duration": duration
+            "duration": duration,
         }
 
 
@@ -90,8 +92,8 @@ async def main(args):
 
     # 4) prepare concurrency controls
     sem = asyncio.Semaphore(args.concurrency)
-    model_lock = asyncio.Lock()   # serialize model calls
-    csv_lock = asyncio.Lock()     # serialize CSV writes
+    model_lock = asyncio.Lock()  # serialize model calls
+    csv_lock = asyncio.Lock()  # serialize CSV writes
 
     # 5) schedule transcription tasks
     tasks = [
@@ -107,7 +109,7 @@ async def main(args):
         try:
             rec = await fut
         except Exception as e:
-            fname = getattr(e, 'filename', 'unknown')
+            fname = getattr(e, "filename", "unknown")
             print(f"\n⚠️  Error on {fname}: {e}")
             continue
 
@@ -119,15 +121,19 @@ async def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Async Whisper Transcription")
-    parser.add_argument("--input_dir",   required=True, help="folder with chunk*.wav")
-    parser.add_argument("--output_csv",  required=True, help="path to metadata.csv")
-    parser.add_argument("--model_size",  default="small",
-                        choices=["tiny","base","small","medium","large"],
-                        help="Whisper model size")
-    parser.add_argument("--device",      default="cuda", help="cuda or cpu")
-    parser.add_argument("--concurrency", type=int, default=2,
-                        help="max concurrent whisper calls")
-    parser.add_argument("--language",    default="pl", help="language code for Whisper")
+    parser.add_argument("--input_dir", required=True, help="folder with chunk*.wav")
+    parser.add_argument("--output_csv", required=True, help="path to metadata.csv")
+    parser.add_argument(
+        "--model_size",
+        default="small",
+        choices=["tiny", "base", "small", "medium", "large"],
+        help="Whisper model size",
+    )
+    parser.add_argument("--device", default="cuda", help="cuda or cpu")
+    parser.add_argument(
+        "--concurrency", type=int, default=2, help="max concurrent whisper calls"
+    )
+    parser.add_argument("--language", default="pl", help="language code for Whisper")
     args = parser.parse_args()
 
     asyncio.run(main(args))

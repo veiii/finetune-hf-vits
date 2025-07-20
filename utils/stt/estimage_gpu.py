@@ -82,6 +82,6 @@ if __name__ == "__main__":
         chunk_length=2.5,
         sample_rate=16000,
         device="cuda",
-        safety=0.9
+        safety=0.9,
     )
     print(f"Estimated max concurrency: {conc}")

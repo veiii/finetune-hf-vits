@@ -83,7 +83,9 @@ class AsyncDenoiser:
             end = start + frame_len
             chunk = audio_padded[start:end]
             # run blocking _denoise_chunk in thread
-            clean = await loop.run_in_executor(self.executor, self._denoise_chunk, chunk)
+            clean = await loop.run_in_executor(
+                self.executor, self._denoise_chunk, chunk
+            )
             results[i] = clean
 
         # schedule all denoising jobs with progress bar
@@ -114,9 +116,7 @@ async def main(args):
     )
 
     # 3) denoise
-    clean = await denoiser.denoise(
-        audio, sr, chunk_duration=args.chunk_duration
-    )
+    clean = await denoiser.denoise(audio, sr, chunk_duration=args.chunk_duration)
 
     # 4) normalize & write out
     clean = clean / (np.max(np.abs(clean)) + 1e-9) * 0.99

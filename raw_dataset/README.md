@@ -33,5 +33,18 @@ python raw_dataset/prepare_voice_audio_file.py -i ./raw_dataset/processing/outpu
 
 ## Create metadata for training
 ```bash
-python utils/stt/transcribe_chunks.py --input-dir ./raw_dataset/processing/output_chunks/ --output-csv ./raw_dataset/processing/output_chunks_transcribed_small.csv --model small --language pol --device cpu
+# Use the new file path method (may solve tensor dimension errors)
+python utils/stt/transcribe_chunks.py \
+  --input-dir ./raw_dataset/processing/chunks_for_transcribe/ \
+  --output-csv ./raw_dataset/processing/output_chunks_transcribed_large.csv \
+  --model-size large \
+  --device cuda \
+  --use-file-path
+
+# Original method with preprocessing (default)
+python utils/stt/transcribe_chunks.py \
+  --input-dir ./raw_dataset/processing/chunks_for_transcribe/ \
+  --output-csv ./raw_dataset/processing/output_chunks_transcribed_large.csv \
+  --model-size large \
+  --device cuda
 ```

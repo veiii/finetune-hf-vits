@@ -10,6 +10,7 @@ import os
 import sys
 from pydub import AudioSegment, silence
 
+
 def main(input_wav, out_dir, min_silence_ms=500, silence_thresh=-40, keep_silence=200):
     os.makedirs(out_dir, exist_ok=True)
     audio = AudioSegment.from_wav(input_wav)
@@ -19,7 +20,7 @@ def main(input_wav, out_dir, min_silence_ms=500, silence_thresh=-40, keep_silenc
         audio,
         min_silence_len=min_silence_ms,
         silence_thresh=silence_thresh,
-        keep_silence=keep_silence
+        keep_silence=keep_silence,
     )
 
     # Export chunks
@@ -27,6 +28,7 @@ def main(input_wav, out_dir, min_silence_ms=500, silence_thresh=-40, keep_silenc
         out_path = os.path.join(out_dir, f"chunk_{i:03d}.wav")
         chunk.export(out_path, format="wav")
         print(f"Saved {out_path}")
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
