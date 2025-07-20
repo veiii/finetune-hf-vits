@@ -27,6 +27,7 @@ import pandas as pd
 import soundfile as sf
 import whisper
 from tqdm import tqdm
+import numpy as np
 
 
 def setup_logging(log_level: str = "INFO") -> logging.Logger:
@@ -42,36 +43,86 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
     return logging.getLogger(__name__)
 
 
-def validate_audio_file(wav_path: str, logger: logging.Logger) -> Optional[Tuple[str, float]]:
-    """Validate audio file and return filename and duration."""
+def validate_and_preprocess_audio(wav_path: str, logger: logging.Logger) -> Optional[Tuple[str, float, np.ndarray]]:
+    """Validate and preprocess audio file, return filename, duration, and audio data."""
     try:
-        info = sf.info(wav_path)
-        duration = info.frames / info.samplerate
-        if duration <= 0:
-            logger.warning(f"Invalid duration for {wav_path}: {duration}s")
+        # Read audio file
+        audio_data, sample_rate = sf.read(wav_path, dtype=np.float32)
+
+        # Validate basic properties
+        if len(audio_data) == 0:
+            logger.warning(f"Empty audio file: {wav_path}")
             return None
-        return os.path.basename(wav_path), duration
+
+        duration = len(audio_data) / sample_rate
+        if duration <= 0.1:  # Too short
+            logger.warning(f"Audio too short ({duration:.2f}s): {wav_path}")
+            return None
+
+        if duration > 30.0:  # Too long for Whisper
+            logger.warning(f"Audio too long ({duration:.2f}s), truncating to 30s: {wav_path}")
+            audio_data = audio_data[:int(30.0 * sample_rate)]
+            duration = 30.0
+
+        # Handle stereo audio (convert to mono)
+        if len(audio_data.shape) > 1:
+            audio_data = np.mean(audio_data, axis=1)
+            logger.debug(f"Converted stereo to mono: {wav_path}")
+
+        # Normalize audio to prevent clipping
+        if np.max(np.abs(audio_data)) > 1.0:
+            audio_data = audio_data / np.max(np.abs(audio_data))
+            logger.debug(f"Normalized audio levels: {wav_path}")
+
+        # Check for silence or very low volume
+        rms = np.sqrt(np.mean(audio_data**2))
+        if rms < 0.001:  # Very quiet audio
+            logger.warning(f"Very low audio level (RMS: {rms:.6f}): {wav_path}")
+            return None
+
+        # # Resample to 16kHz if needed (Whisper's expected sample rate)
+        # if sample_rate != 16000:
+        #     logger.debug(f"Resampling from {sample_rate}Hz to 16000Hz: {wav_path}")
+        #     # Simple resampling using linear interpolation
+        #     target_length = int(len(audio_data) * 16000 / sample_rate)
+        #     audio_data = np.interp(
+        #         np.linspace(0, len(audio_data), target_length),
+        #         np.arange(len(audio_data)),
+        #         audio_data
+        #     )
+        #     duration = len(audio_data) / 16000
+
+        return os.path.basename(wav_path), duration, audio_data
+
     except Exception as e:
-        logger.error(f"Failed to read audio file {wav_path}: {e}")
+        logger.error(f"Failed to process audio file {wav_path}: {e}")
         return None
 
 
 def transcribe_single_file(args: Tuple[str, whisper.Whisper, logging.Logger]) -> Optional[Dict]:
-    """Transcribe a single audio file."""
+    """Transcribe a single audio file with enhanced error handling."""
     wav_path, model, logger = args
 
     try:
-        # Validate file
-        validation_result = validate_audio_file(wav_path, logger)
+        # Validate and preprocess file
+        validation_result = validate_and_preprocess_audio(wav_path, logger)
         if validation_result is None:
             return None
 
-        fname, duration = validation_result
+        fname, duration, audio_data = validation_result
 
-        # Transcribe
-        logger.debug(f"Transcribing {fname}")
+        # Transcribe using preprocessed audio data
+        logger.debug(f"Transcribing {fname} (duration: {duration:.2f}s)")
         start_time = time.time()
-        result = model.transcribe(audio=wav_path, language="pl")
+
+        # Use the preprocessed audio data directly
+        result = model.transcribe(
+            audio=audio_data,
+            language="pl",
+            fp16=False,  # Use fp32 for stability
+            verbose=False  # Reduce noise in logs
+        )
+
         transcribe_time = time.time() - start_time
 
         text = result["text"].strip()
@@ -79,7 +130,12 @@ def transcribe_single_file(args: Tuple[str, whisper.Whisper, logging.Logger]) ->
             logger.warning(f"Empty transcription for {fname}")
             return None
 
-        logger.debug(f"Transcribed {fname} in {transcribe_time:.2f}s")
+        # Additional validation of transcription quality
+        if len(text) < 3:  # Very short transcription might be noise
+            logger.warning(f"Very short transcription ({len(text)} chars) for {fname}: '{text}'")
+            return None
+
+        logger.debug(f"Transcribed {fname} in {transcribe_time:.2f}s: '{text[:50]}{'...' if len(text) > 50 else ''}'")
 
         return {
             "audio": fname,
@@ -173,7 +229,7 @@ def transcribe_folder(input_dir: str,
     logger.info("Validating audio files...")
     valid_paths = []
     for wav_path in tqdm(wav_paths, desc="Validating"):
-        if validate_audio_file(wav_path, logger) is not None:
+        if validate_and_preprocess_audio(wav_path, logger) is not None:
             valid_paths.append(wav_path)
 
     if not valid_paths:
