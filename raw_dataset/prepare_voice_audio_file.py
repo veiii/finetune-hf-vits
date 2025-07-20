@@ -164,6 +164,8 @@ def main():
     parser.add_argument("-i", "--input", required=True, help="Input directory containing WAV files")
     parser.add_argument("-o", "--output", required=True, help="Output directory for vocals files")
     parser.add_argument("-t", "--temp", help="Temporary directory for demucs processing (optional)")
+    parser.add_argument("-w", "--max-workers", type=int, default=None,
+                        help="Maximum number of worker threads (default: number of CPU cores)")
     parser.add_argument("--check-demucs", action="store_true", help="Check if demucs is installed")
 
     args = parser.parse_args()
@@ -196,7 +198,7 @@ def main():
         return
 
     # Process the directory
-    process_audio_directory(args.input, args.output, args.temp)
+    process_audio_directory(args.input, args.output, args.temp, args.max_workers)
 
 
 if __name__ == "__main__":
