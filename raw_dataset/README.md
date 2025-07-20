@@ -28,6 +28,6 @@ chmod +x cut_into_chunks.sh
 
 ## Preprocess audio files for training
 ```bash
-python raw_dataset/prepare_voice_audio_file.py --input ./raw_dataset/processing/output_chunks/ --output ./raw_dataset/processing/chunks_cleaned_audio/
+python raw_dataset/prepare_voice_audio_file.py --input ./raw_dataset/processing/output_chunks/ --output ./raw_dataset/processing/chunks_cleaned_audio/ --temp /tmp/dmc --num_workers 8
 ```
 

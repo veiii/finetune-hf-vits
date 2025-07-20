@@ -8,25 +8,26 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
 
-def extract_vocals_with_demucs(input_file, temp_output_dir):
+def extract_vocals_with_demucs(input_file, temp_output_dir, timeout=300):
     """
     Extract vocals from audio file using demucs
 
     Args:
         input_file: Path to input audio file
         temp_output_dir: Temporary directory for demucs output
+        timeout: Timeout in seconds for demucs processing
 
     Returns:
         Path to extracted vocals file or None if failed
     """
     try:
-        # Run demucs command with vocals separation only
+        # Run demucs command with vocals separation only and timeout
         result = subprocess.run([
             "demucs",
             "--two-stems", "vocals",
             "--out", temp_output_dir,
             str(input_file)
-        ], capture_output=True, text=True, check=True)
+        ], capture_output=True, text=True, check=True, timeout=timeout)
 
         # Find the vocals file in the demucs output structure
         # Demucs creates: temp_output_dir/htdemucs_ft/{filename_without_ext}/vocals.wav
@@ -45,6 +46,9 @@ def extract_vocals_with_demucs(input_file, temp_output_dir):
             print(f"Warning: Vocals file not found at expected location: {vocals_file}")
             return None
 
+    except subprocess.TimeoutExpired:
+        print(f"Timeout: demucs processing took longer than {timeout}s for {input_file}")
+        return None
     except subprocess.CalledProcessError as e:
         print(f"Error processing {input_file}: {e}")
         print(f"Stderr: {e.stderr}")
